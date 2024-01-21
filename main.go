@@ -16,27 +16,31 @@ type invServ struct {
 	inv.UnimplementedInvServer
 }
 
+func isAdmin(ctx context.Context) bool {
+	user, ok := ctx.Value("user").(inv.User)
+	return ok && user.Admin
+}
+
 func (s invServ) CreateUser(ctx context.Context, req *inv.CreateUserRequest) (*inv.CreateUserResponse, error) {
-	if req.User.Admin == true {
-		req.User.Id = uuid.New().String()
-
-		us := inv.User{
-			Id:       req.User.Id,
-			Email:    req.User.Email,
-			Username: req.User.Username,
-			Password: req.User.Password,
-			Admin:    req.User.Admin,
-		}
-		// log.Println(us)
-
-		c.Set(req.User.Email, us)
-
-		return &inv.CreateUserResponse{
-			Done: "done",
-		}, nil
+	if !isAdmin(ctx) {
+		return nil, errors.New("not admin")
 	}
+	req.User.Id = uuid.New().String()
 
-	return &inv.CreateUserResponse{Done: "not admin"}, errors.New("not admin")
+	us := inv.User{
+		Id:       req.User.Id,
+		Email:    req.User.Email,
+		Username: req.User.Username,
+		Password: req.User.Password,
+		Admin:    req.User.Admin,
+	}
+	// log.Println(us)
+
+	c.Set(req.User.Email, us)
+
+	return &inv.CreateUserResponse{
+		Done: "done",
+	}, nil
 }
 
 func (s invServ) GetAllUsers(ctx context.Context, req *inv.GetUsersRequest) (*inv.GetUsersResponse, error) {
@@ -109,16 +113,16 @@ func (s invServ) UpdateUser(ctx context.Context, req *inv.UpdateUserRequest) (*i
 		return nil, errors.New("could not update/find user")
 	}
 
-	if us.Admin {
-		us.Username = req.Name
-		us.Password = req.Password
-		c.Set(us.Email, *us)
-
-		// log.Println(us)
-		return &inv.CreateUserResponse{Done: "user updated"}, nil
+	if !isAdmin(ctx) {
+		return nil, errors.New("Update: not admin")
 	}
 
-	return &inv.CreateUserResponse{Done: "not admin"}, errors.New("Update: not admin")
+	us.Username = req.Name
+	us.Password = req.Password
+	c.Set(us.Email, *us)
+
+	// log.Println(us)
+	return &inv.CreateUserResponse{Done: "user updated"}, nil
 }
 
 func (s invServ) DeleteUser(ctx context.Context, req *inv.DeleteUserRequest) (*inv.CreateUserResponse, error) {
@@ -127,12 +131,32 @@ func (s invServ) DeleteUser(ctx context.Context, req *inv.DeleteUserRequest) (*i
 		return nil, errors.New("could not find user")
 	}
 
-	if us.Admin {
-		c.Delete(us.Email)
-		return &inv.CreateUserResponse{Done: "done"}, nil
+	if !isAdmin(ctx) {
+		return nil, errors.New("Delete: not admin")
 	}
 
-	return &inv.CreateUserResponse{Done: "only admin can delete users"}, errors.New("Delete: not admin")
+	c.Delete(us.Email)
+
+	return &inv.CreateUserResponse{Done: "done"}, nil
+}
+
+func adminAuthInterceptor(
+	ctx context.Context,
+	req interface{},
+	info *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (interface{}, error) {
+
+	user, ok := ctx.Value("user").(inv.User)
+	if !ok {
+		return nil, errors.New("unauthenticated: user not found in context")
+	}
+
+	if !user.Admin {
+		return nil, errors.New("unauthorized: admin access only")
+	}
+
+	return handler(ctx, req)
 }
 
 var c = cache.New()
@@ -142,25 +166,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("cannot create listener: %s", err)
 	}
-	srvReg := grpc.NewServer()
+	srvReg := grpc.NewServer(
+		grpc.UnaryInterceptor(adminAuthInterceptor),
+	)
 	service := &invServ{}
 
 	inv.RegisterInvServer(srvReg, service)
 
-	// us := &inv.User{
-	// 	Id:       "1234",
-	// 	Email:    "test@mail.ru",
-	// 	Username: "andrew",
-	// 	Password: "password",
-	// 	Admin:    false,
-	// }
-
-	// out, err1 := proto.Marshal(us)
-	// if err1 != nil {
-	// 	log.Fatal(err1)
-	// }
-
-	// if err1 :=
 	err = srvReg.Serve(lis)
 	if err != nil {
 		log.Fatalf("impossible to serve: %s", err)
