@@ -1,0 +1,62 @@
+syntax = "proto3";
+option go_package = "github.com/g3orge/grpc-demo/inv";
+
+message User {
+    string id = 1;
+    string email = 2;
+    string username = 3;
+    string password = 4;
+    bool admin = 5;
+}
+
+message CreateUserRequest {
+    User user = 1;
+}
+
+message CreateUserResponse {
+    string done = 1;
+}
+
+message GetUsersRequest {
+    int64 page = 1;
+    int64 pageSize = 2;
+}
+
+message GetUsersResponse {
+    repeated User users = 1;
+    int64 total = 2;
+}
+
+message GetUserResponse {
+    User users = 1;
+}
+
+
+message GetUserByIdRequest {
+    string id = 1;
+}
+
+message GetUserByNameRequest {
+    string name = 1;
+    User user = 2;
+}
+
+message UpdateUserRequest {
+    User user = 1;
+    string name = 2;
+    string password = 3;
+}
+
+message DeleteUserRequest {
+    string name = 1;
+    string password = 2;
+}
+
+service Inv {
+    rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
+    rpc GetAllUsers(GetUsersRequest) returns (GetUsersResponse);
+    rpc GetUserById(GetUserByIdRequest) returns (GetUserResponse);
+    rpc GetUserByName(GetUserByNameRequest) returns (GetUserResponse);
+    rpc UpdateUser(UpdateUserRequest) returns (CreateUserResponse);
+    rpc DeleteUser(DeleteUserRequest) returns (CreateUserResponse);
+}
